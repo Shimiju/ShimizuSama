@@ -1,0 +1,71 @@
+server:
+  port: 2333
+  address: 0.0.0.0
+
+lavalink:
+  plugins: []
+  server:
+    password: "shimizu-lavalink-dev"
+    sources:
+      youtube: false
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      http: true
+      local: false
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: LOW
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 6
+    playerUpdateInterval: 5
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: true
+    gc-warnings: true
+
+plugins:
+  lavasrc:
+    sources:
+      ytdlp: true
+    ytdlp:
+      path: /opt/yt-dlp/yt-dlp
+      searchLimit: 10
+      # Cookies akun Google dipakai agar YouTube menganggap akses ini sah
+      # (CDN googlevideo menolak 403 bila tanpa autentikasi dari IP tertentu).
+      # --js-runtimes node: needed untuk memecahkan tantangan JS (nsig) YouTube.
+      customLoadArgs: ["-q", "--no-warnings", "--flat-playlist", "--skip-download", "--cookies", "/opt/yt-dlp/cookies.txt", "--js-runtimes", "node:/opt/node/bin/node", "-J"]
+      customPlaybackArgs: ["-q", "--no-warnings", "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/18/best[ext=mp4]/best", "--cookies", "/opt/yt-dlp/cookies.txt", "--js-runtimes", "node:/opt/node/bin/node", "-J"]
+
+metrics:
+  prometheus:
+    enabled: false
+    endpoint: /metrics
+
+sentry:
+  dsn: ""
+  environment: ""
+
+logging:
+  file:
+    path: ./logs/
+  logback:
+    rollingpolicy:
+      max-file-size: 1GB
+      max-history: 7
+  level:
+    root: INFO
+    lavalink: INFO
