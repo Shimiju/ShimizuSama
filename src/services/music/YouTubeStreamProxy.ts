@@ -234,12 +234,14 @@ export interface LiveStreamInfo {
  */
 export async function checkLiveStream(handle: string): Promise<LiveStreamInfo | null> {
   const url = handle.startsWith('UC') 
-    ? `https://www.youtube.com/channel/${handle}/live`
-    : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/live`;
+    ? `https://www.youtube.com/channel/${handle}/streams`
+    : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/streams`;
 
   try {
     const args = [
       '--dump-json',
+      '--flat-playlist',
+      '--playlist-items', '1',
       '--cookies', COOKIES,
       '--no-warnings',
       url
@@ -248,7 +250,7 @@ export async function checkLiveStream(handle: string): Promise<LiveStreamInfo | 
     const { stdout } = await execFileAsync(YTDLP, args);
     const data = JSON.parse(stdout);
     
-    // yt-dlp will normally error out if not live, but just in case it succeeds:
+    // With --flat-playlist on /streams, yt-dlp returns the metadata of the latest stream
     if (data.is_live === true || data.live_status === 'is_live') {
       return {
         videoId: data.id,
