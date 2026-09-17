@@ -16,7 +16,7 @@ const envSchema = z.object({
     .string()
     .url()
     .default('http://localhost:3000/api/auth/callback'),
-  BIND_HOST: z.string().default('127.0.0.1'),
+  BIND_HOST: z.string().default('0.0.0.0'),
   DASHBOARD_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LAVALINK_HOST: z.string().min(1).optional(),
   LAVALINK_PORT: z.string().optional(),

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run build --workspace=dashboard-ui",
     "start": "npx prisma db push --accept-data-loss && node dist/index.js",
     "test": "vitest run",
     "lint": "eslint .",
@@ -54,5 +54,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.10"
-  }
+  },
+  "workspaces": [
+    "dashboard-ui"
+  ]
 }
