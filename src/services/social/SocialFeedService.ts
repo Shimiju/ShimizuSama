@@ -56,6 +56,7 @@ export class SocialFeedService {
         if (parsed.items && parsed.items.length > 0) {
           const latestVideo = parsed.items[0];
           const videoId = latestVideo.id; // Looks like: yt:video:v1deo1D
+          const rawVideoId = videoId.replace('yt:video:', '');
           
           if (!feed.lastPostId) {
             // First time seeing this feed! Just save the ID, do NOT post.
@@ -65,8 +66,27 @@ export class SocialFeedService {
             });
             logger.info({ handle: feed.handle }, 'Initialized new social feed silently.');
           } else if (videoId !== feed.lastPostId) {
-            // New video found!
-            logger.info({ guildId: feed.guildId, handle: feed.handle }, 'New YouTube video detected!');
+            // New video found! Check if it's a LIVE stream.
+            let isLive = false;
+            try {
+              const videoRes = await fetch(`https://www.youtube.com/watch?v=${rawVideoId}`);
+              const videoHtml = await videoRes.text();
+              // YouTube HTML contains "isLive":true for active live streams
+              isLive = videoHtml.includes('\\"isLive\\":true') || videoHtml.includes('isLiveBroadcast" content="True"');
+            } catch (err) {
+              logger.error('Failed to verify live status');
+            }
+
+            if (!isLive) {
+              logger.info({ handle: feed.handle, videoId }, 'Skipping normal video upload (user only wants live streams).');
+              await prisma.socialFeed.update({
+                where: { id: feed.id },
+                data: { lastPostId: videoId }
+              });
+              continue;
+            }
+
+            logger.info({ guildId: feed.guildId, handle: feed.handle }, 'New YouTube LIVE stream detected!');
             
             const guild = this.client.guilds.cache.get(feed.guildId);
             if (!guild) continue;
@@ -75,12 +95,12 @@ export class SocialFeedService {
             if (!channel) continue;
 
             const creatorName = parsed.title || feed.handle;
-            const videoLink = latestVideo.link || `https://youtube.com/watch?v=${videoId.replace('yt:video:', '')}`;
+            const videoLink = latestVideo.link || `https://youtube.com/watch?v=${rawVideoId}`;
             
             let message = feed.message
               .replace(/{creator}/g, creatorName)
               .replace(/{link}/g, videoLink)
-              .replace(/{title}/g, latestVideo.title || 'New Video');
+              .replace(/{title}/g, latestVideo.title || 'New Live Stream');
 
             await channel.send({ content: message });
 
