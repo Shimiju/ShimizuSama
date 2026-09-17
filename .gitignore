@@ -10,7 +10,6 @@ lavalink/yt-dlp/cookies.txt
 
 # Binary runtime berat (unduh ulang: lihat README)
 lavalink/node/
-lavalink/yt-dlp/yt-dlp
 lavalink/plugins/*.jar.bak
 lavalink/plugins/*.disabled
 

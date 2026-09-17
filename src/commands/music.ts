@@ -206,7 +206,16 @@ const command: Command = {
         if (/youtube\.com|youtu\.be/i.test(videoUrl)) {
           try {
             const direct = await audioProxy.resolveDirectStream(videoUrl);
-            const proxiedUrl = `${env.AUDIO_PROXY_LAVALINK_URL}/proxy?u=${encodeURIComponent(direct.url)}`;
+            
+            // Automatically fix host.docker.internal for Railway deployments
+            let proxyBaseUrl = env.AUDIO_PROXY_LAVALINK_URL;
+            if (process.env.RAILWAY_PRIVATE_DOMAIN && proxyBaseUrl.includes('host.docker.internal')) {
+              proxyBaseUrl = proxyBaseUrl.replace('host.docker.internal', process.env.RAILWAY_PRIVATE_DOMAIN);
+            }
+            
+            const proxiedUrl = `${proxyBaseUrl}/proxy?u=${encodeURIComponent(direct.url)}`;
+            
+            console.log(`[Music] yt-dlp success. Attempting Lavalink resolve for: ${proxyBaseUrl}`);
             const proxied = await musicService.resolve(proxiedUrl);
 
             if (proxied && proxied.length > 0) {
@@ -215,10 +224,13 @@ const command: Command = {
               // tapi track yang diputar berasal dari sumber http (proxy).
               proxiedTrack.info = { ...track.info, uri: proxiedUrl } as any;
               track = proxiedTrack;
+              console.log(`[Music] Proxy successful!`);
+            } else {
+              console.log(`[Music] Proxy fallback failed because Lavalink returned 0 tracks for the proxy URL. URL: ${env.AUDIO_PROXY_LAVALINK_URL} is likely unreachable from Lavalink.`);
             }
           } catch (proxyErr) {
             console.log(
-              `[Music] Proxy fallback gagal, pakai jalur langsung: ${(proxyErr as Error).message}`
+              `[Music] Proxy fallback gagal (yt-dlp error), pakai jalur langsung: ${(proxyErr as Error).message}`
             );
           }
         }
