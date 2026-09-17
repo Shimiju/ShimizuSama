@@ -14,8 +14,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Project root = src/services/music/../../..  -> Shimizu-Source
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 
-const YTDLP = env.YTDLP_PATH || path.join(PROJECT_ROOT, 'lavalink', 'yt-dlp', 'yt-dlp');
+const isWin = process.platform === 'win32';
+
+let YTDLP = env.YTDLP_PATH || path.join(PROJECT_ROOT, 'lavalink', 'yt-dlp', isWin ? 'yt-dlp.exe' : 'yt-dlp');
+if (!isWin && YTDLP.endsWith('.exe')) YTDLP = YTDLP.replace('.exe', '');
+
+import fs from 'node:fs';
+if (!isWin) {
+  try { fs.chmodSync(YTDLP, 0o755); } catch (e) {}
+}
+
 const NODE_RT = env.YTDLP_NODE_PATH || path.join(PROJECT_ROOT, 'lavalink', 'node', 'bin', 'node');
+const finalNodeRt = fs.existsSync(NODE_RT) ? NODE_RT : 'node';
+
 const COOKIES = env.YTDLP_COOKIES_PATH || path.join(PROJECT_ROOT, 'lavalink', 'yt-dlp', 'cookies.txt');
 
 const FORMAT = 'bestaudio[ext=m4a]/bestaudio[ext=webm]/18/best[ext=mp4]/best';
@@ -38,7 +49,7 @@ export async function resolveDirectStream(videoUrl: string): Promise<DirectStrea
     '--no-warnings',
     '-f', FORMAT,
     '--cookies', COOKIES,
-    '--js-runtimes', `node:${NODE_RT}`,
+    '--js-runtimes', `node:${finalNodeRt}`,
     '-J',
     videoUrl,
   ];
