@@ -17,15 +17,13 @@ export class SocialFeedService {
   private static startPolling() {
     if (this.intervalId) clearInterval(this.intervalId);
     
-    // Poll every 1 minute for near-instant detection
+    // Poll every 15 seconds for true instant detection
     this.intervalId = setInterval(() => {
       this.checkFeeds().catch(err => logger.error({ err }, 'Error checking social feeds'));
-    }, 60 * 1000);
+    }, 15 * 1000);
 
-    // Initial check on boot
-    setTimeout(() => {
-      this.checkFeeds().catch(err => logger.error({ err }, 'Error checking social feeds on boot'));
-    }, 10000);
+    // Initial check on boot instantly
+    this.checkFeeds().catch(err => logger.error({ err }, 'Error checking social feeds on boot'));
   }
 
   private static async checkFeeds() {
