@@ -222,3 +222,47 @@ export const audioProxy = {
   resolveDirectStream,
   start: startAudioProxy,
 };
+
+export interface LiveStreamInfo {
+  videoId: string;
+  title: string;
+}
+
+/**
+ * Checks if a YouTube channel is currently live using yt-dlp.
+ * Bypasses bot detection by using the same cookies and proxies as the music system.
+ */
+export async function checkLiveStream(handle: string): Promise<LiveStreamInfo | null> {
+  const url = handle.startsWith('UC') 
+    ? `https://www.youtube.com/channel/${handle}/live`
+    : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/live`;
+
+  try {
+    const args = [
+      '--dump-json',
+      '--cookies', COOKIES,
+      '--no-warnings',
+      url
+    ];
+    
+    const { stdout } = await execFileAsync(YTDLP, args);
+    const data = JSON.parse(stdout);
+    
+    // yt-dlp will normally error out if not live, but just in case it succeeds:
+    if (data.is_live === true || data.live_status === 'is_live') {
+      return {
+        videoId: data.id,
+        title: data.title
+      };
+    }
+    return null;
+  } catch (err: any) {
+    // Expected to fail if channel is not currently live
+    // (stderr contains: "ERROR: [youtube:tab] @...: The channel is not currently live")
+    const stderr = err.stderr || '';
+    if (!stderr.includes('is not currently live')) {
+      logger.warn({ err: stderr || err.message, url }, 'yt-dlp live check failed with unexpected error');
+    }
+    return null;
+  }
+}

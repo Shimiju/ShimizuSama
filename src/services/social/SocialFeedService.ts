@@ -3,6 +3,7 @@ import { ShimizuClient } from '../../bot/client.js';
 import { prisma } from '../../database/prisma.js';
 import { logger } from '../../utils/logger.js';
 import { TextChannel } from 'discord.js';
+import { checkLiveStream } from '../music/YouTubeStreamProxy.js';
 
 const parser = new Parser();
 
@@ -50,21 +51,11 @@ export class SocialFeedService {
         let streamAnnounced = false;
         let ucId = feed.handle;
 
-        // 1. Check for Active Live Stream via Web Scrape
+        // 1. Check for Active Live Stream using yt-dlp
         try {
-          const liveRes = await fetch(liveUrl);
-          const htmlText = await liveRes.text();
-          
-          if (!isUC) {
-             const channelMatch = htmlText.match(/<meta itemprop="channelId" content="(UC.*?)"/);
-             if (channelMatch) ucId = channelMatch[1];
-          }
-
-          const canonicalMatch = htmlText.match(/<link rel="canonical" href="(.*?)">/);
-          const titleMatch = htmlText.match(/<meta name="title" content="(.*?)">/);
-
-          if (canonicalMatch && canonicalMatch[1].includes('/watch?v=')) {
-            const liveVideoId = canonicalMatch[1].split('v=')[1];
+          const liveStream = await checkLiveStream(feed.handle);
+          if (liveStream) {
+            const liveVideoId = liveStream.videoId;
             
             if (!feed.lastPostId) {
               await prisma.socialFeed.update({
@@ -80,19 +71,16 @@ export class SocialFeedService {
               if (guild) {
                 const channel = guild.channels.cache.get(feed.channelId) as TextChannel;
                 if (channel) {
-                  // Extract channel name from channel page title
                   let creatorName = feed.handle;
                   try {
                     const channelRes = await fetch(`https://www.youtube.com/channel/${ucId}`);
                     const channelHtml = await channelRes.text();
                     const channelTitleMatch = channelHtml.match(/<title>(.*?) - YouTube<\/title>/);
                     if (channelTitleMatch) creatorName = channelTitleMatch[1];
-                  } catch (e) {
-                    logger.warn({ err: e }, 'Could not fetch channel name');
-                  }
+                  } catch (e) {}
                   
-                  const videoTitle = titleMatch ? titleMatch[1].replace(/ - YouTube$/, '') : '🔴 LIVE NOW';
-                  const videoLink = canonicalMatch[1];
+                  const videoTitle = liveStream.title || '🔴 LIVE NOW';
+                  const videoLink = `https://www.youtube.com/watch?v=${liveVideoId}`;
                   
                   let message = feed.message
                     .replace(/{creator}/g, creatorName)
@@ -109,12 +97,11 @@ export class SocialFeedService {
                 }
               }
             } else {
-              // We already announced this live stream
-              streamAnnounced = true;
+              streamAnnounced = true; // We already announced this live stream
             }
           }
         } catch (scrapeErr) {
-          logger.error({ scrapeErr, feedId: feed.id }, 'Failed to scrape live stream, falling back to RSS');
+          logger.error({ scrapeErr, feedId: feed.id }, 'Failed to check live stream, falling back to RSS');
         }
 
         // 2. If no live stream or already announced, check RSS for normal uploads
