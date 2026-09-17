@@ -14,9 +14,7 @@ const command: Command = {
         .setName('nickname')
         .setDescription('The new nickname (leave empty to reset)')
         .setRequired(false)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames),
-
+    ),
   execute: async (interaction: ChatInputCommandInteraction) => {
     if (!interaction.inCachedGuild()) {
       await interaction.reply({
@@ -26,15 +24,34 @@ const command: Command = {
       return;
     }
 
+    const adminRoleId = '1539506154047152138';
+    const firstMemberRoleId = '1539506802260049950';
+    const secondMemberRoleId = '1539506302420647936';
+
+    const memberRoles = (interaction.member as any).roles.cache;
+    const hasPermission = 
+      memberRoles.has(adminRoleId) || 
+      memberRoles.has(firstMemberRoleId) || 
+      memberRoles.has(secondMemberRoleId) ||
+      (interaction.member as any).permissions.has(PermissionFlagsBits.Administrator) ||
+      (interaction.member as any).permissions.has(PermissionFlagsBits.ManageNicknames);
+
+    if (!hasPermission) {
+      await interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+      return;
+    }
+
     const targetUser = interaction.options.getUser('target', true);
     const newNickname = interaction.options.getString('nickname') || null;
     const guild = interaction.guild;
     const moderator = interaction.member;
 
-    const hierarchyError = await ModerationService.validateHierarchy(guild, moderator, targetUser);
-    if (hierarchyError) {
-      await interaction.reply({ content: `❌ ${hierarchyError}`, ephemeral: true });
-      return;
+    if (moderator.id !== targetUser.id) {
+      const hierarchyError = await ModerationService.validateHierarchy(guild, moderator, targetUser);
+      if (hierarchyError) {
+        await interaction.reply({ content: `❌ ${hierarchyError}`, ephemeral: true });
+        return;
+      }
     }
 
     await interaction.deferReply({ ephemeral: true });

@@ -69,7 +69,10 @@ const command: Command = {
     .addSubcommand((sub) => sub.setName('list').setDescription('List all active giveaways')),
 
   execute: async (interaction: ChatInputCommandInteraction) => {
-    if (!interaction.inCachedGuild()) return;
+    if (!interaction.inCachedGuild()) {
+      await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+      return;
+    }
     const subCommand = interaction.options.getSubcommand();
     const guild = interaction.guild;
     const channel = interaction.channel;

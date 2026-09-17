@@ -1,56 +1,95 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { Command } from '../../types/index.js';
+import { prisma } from '../../database/prisma.js';
+import { RankCardGenerator } from '../../services/image/RankCardGenerator.js';
 import { LevelingService } from '../../services/economy/LevelingService.js';
-import { EconomyService } from '../../services/economy/EconomyService.js';
 import { logger } from '../../utils/logger.js';
+import { CacheService } from '../../services/cacheService.js';
 
-const command: Command = {
+export const command: Command = {
   data: new SlashCommandBuilder()
     .setName('rank')
-    .setDescription("Check your or another user's current level and XP.")
+    .setDescription('View your server rank and level progress')
     .addUserOption((option) =>
-      option.setName('user').setDescription('The user to check').setRequired(false)
+      option
+        .setName('user')
+        .setDescription('The user to view the rank of')
+        .setRequired(false)
     ),
-  execute: async (interaction: ChatInputCommandInteraction) => {
-    if (!interaction.guildId) {
-      await interaction.reply({
-        content: 'This command can only be used in a server.',
-        ephemeral: true,
-      });
+
+  async execute(interaction) {
+    if (!interaction.guild) {
+      await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
       return;
     }
 
     const targetUser = interaction.options.getUser('user') || interaction.user;
+    
+    if (targetUser.bot) {
+      await interaction.reply({ content: 'Bots do not have ranks!', ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply();
 
     try {
-      const profile = await EconomyService.getProfile(interaction.guildId, targetUser.id);
+      // Check if leveling is enabled
+      const cacheKey = `guild:settings:${interaction.guild.id}`;
+      let settings = await CacheService.get<any>(cacheKey);
+      if (!settings) {
+        settings = await prisma.guildSettings.findUnique({
+          where: { guildId: interaction.guild.id },
+        });
+      }
 
-      const currentLevel = profile.level;
-      const currentXp = profile.xp;
-      const nextLevelXp = LevelingService.requiredTotalXp(currentLevel + 1);
-      const prevLevelXp = LevelingService.requiredTotalXp(currentLevel);
+      if (settings && settings.levelingEnabled === false) {
+        await interaction.editReply('Leveling is currently disabled in this server.');
+        return;
+      }
 
-      const xpInCurrentLevel = currentXp - prevLevelXp;
-      const xpNeededForNextLevel = nextLevelXp - prevLevelXp;
-      const progressPercent = Math.min(
-        100,
-        Math.max(0, Math.floor((xpInCurrentLevel / xpNeededForNextLevel) * 100))
-      );
+      const guildId = interaction.guild.id;
+      const userId = targetUser.id;
 
-      const barLength = 20;
-      const filledLength = Math.floor((progressPercent / 100) * barLength);
-      const emptyLength = barLength - filledLength;
-      const progressBar = '█'.repeat(filledLength) + '░'.repeat(emptyLength);
-
-      await interaction.reply({
-        content: `📈 **${targetUser.username}'s Rank**\n\n**Level:** ${currentLevel}\n**XP:** ${currentXp} / ${nextLevelXp}\n\n**Progress:** [${progressBar}] ${progressPercent}%`,
+      // Fetch user profile
+      const profile = await prisma.userGuildProfile.findUnique({
+        where: { guildId_userId: { guildId, userId } }
       });
-    } catch (error) {
-      logger.error(
-        { error, guildId: interaction.guildId, userId: interaction.user.id },
-        'Error in /rank command'
+
+      if (!profile) {
+        await interaction.editReply(`${targetUser.toString()} has not earned any XP yet!`);
+        return;
+      }
+
+      // Calculate Rank
+      const rankCount = await prisma.userGuildProfile.count({
+        where: {
+          guildId,
+          xp: { gt: profile.xp }
+        }
+      });
+      const rank = rankCount + 1;
+
+      // Calculate Next Level XP
+      // The current level is `profile.level`
+      // The XP required to reach the NEXT level is `100 * Math.pow(profile.level + 1, 2)`
+      const requiredXp = LevelingService.requiredTotalXp(profile.level + 1);
+
+      // Generate Image
+      const buffer = await RankCardGenerator.generateCard(
+        targetUser.username,
+        targetUser.displayAvatarURL({ extension: 'png', size: 256, forceStatic: true }),
+        profile.xp,
+        requiredXp,
+        profile.level,
+        rank
       );
-      await interaction.reply({ content: 'Failed to retrieve rank.', ephemeral: true });
+
+      const attachment = new AttachmentBuilder(buffer, { name: 'rank-card.png' });
+
+      await interaction.editReply({ files: [attachment] });
+    } catch (error) {
+      logger.error({ error, guildId: interaction.guild.id, userId: interaction.user.id }, 'Error generating rank card');
+      await interaction.editReply('An error occurred while generating the rank card.');
     }
   },
 };

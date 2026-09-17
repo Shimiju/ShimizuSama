@@ -21,7 +21,7 @@ const command: Command = {
         interaction.user.id
       );
       await interaction.reply({
-        content: `✅ You claimed your daily reward of **${reward} coins**!\nYour new balance is **${newBalance} coins**.`,
+        content: `🍷 You have claimed your Lord's Tithe! Received **${reward} Manor Gold 🪙**.\nYour vault now holds **${newBalance} Manor Gold**.`,
         flags: MessageFlags.Ephemeral,
       });
 
@@ -39,7 +39,7 @@ const command: Command = {
         const hours = Math.floor(remainingMs / (1000 * 60 * 60));
         const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
         await interaction.reply({
-          content: `⏳ You already claimed your daily reward. Please wait **${hours}h ${minutes}m** before claiming again.`,
+          content: `⏳ The Lords have already granted your tithe today. Please wait **${hours}h ${minutes}m** before claiming again.`,
           ephemeral: true,
         });
       } else if (error.message && error.message.includes('Economy is disabled')) {

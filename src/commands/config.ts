@@ -38,6 +38,17 @@ const command: Command = {
                 .setRequired(true)
             )
         )
+        .addSubcommand((sub) =>
+          sub
+            .setName('set-background')
+            .setDescription('Set custom welcome image background')
+            .addStringOption((opt) =>
+              opt
+                .setName('url')
+                .setDescription('Image URL')
+                .setRequired(true)
+            )
+        )
     )
 
     .addSubcommandGroup((group) =>
@@ -121,7 +132,10 @@ const command: Command = {
     ),
 
   execute: async (interaction: ChatInputCommandInteraction) => {
-    if (!interaction.inCachedGuild()) return;
+    if (!interaction.inCachedGuild()) {
+      await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+      return;
+    }
     await interaction.deferReply({ ephemeral: true });
 
     const group = interaction.options.getSubcommandGroup();
@@ -130,6 +144,13 @@ const command: Command = {
 
     if (group === 'welcome' || group === 'goodbye') {
       const isWelcome = group === 'welcome';
+      
+      // Ensure Guild exists before creating relations
+      const guild = await prisma.guild.findUnique({ where: { id: guildId } });
+      if (!guild) {
+        await prisma.guild.create({ data: { id: guildId } });
+      }
+
       const config = await prisma.welcomeConfig.findUnique({ where: { guildId } });
       if (!config) await prisma.welcomeConfig.create({ data: { guildId } });
 
@@ -161,9 +182,21 @@ const command: Command = {
         });
         await interaction.followUp(`✅ Successfully set ${group} message to:\n${msg}`);
       }
+
+      if (subCommand === 'set-background') {
+        const url = interaction.options.getString('url', true);
+        await prisma.welcomeConfig.update({
+          where: { guildId },
+          data: { backgroundUrl: url },
+        });
+        await interaction.followUp(`✅ Successfully set custom welcome background image to:\n${url}`);
+      }
     }
 
     if (group === 'autorole') {
+      const guild = await prisma.guild.findUnique({ where: { id: guildId } });
+      if (!guild) await prisma.guild.create({ data: { id: guildId } });
+
       if (subCommand === 'add') {
         const role = interaction.options.getRole('role', true);
         const existing = await prisma.autorole.findFirst({ where: { guildId, roleId: role.id } });
@@ -199,6 +232,9 @@ const command: Command = {
     }
 
     if (group === 'raid') {
+      const guild = await prisma.guild.findUnique({ where: { id: guildId } });
+      if (!guild) await prisma.guild.create({ data: { id: guildId } });
+
       const config = await prisma.raidProtection.findUnique({ where: { guildId } });
       if (!config) await prisma.raidProtection.create({ data: { guildId } });
 

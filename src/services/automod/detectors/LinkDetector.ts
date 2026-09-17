@@ -2,7 +2,7 @@ import { Message } from 'discord.js';
 import { Detector, DetectorContext, Violation } from '../AutoModTypes.js';
 
 export class LinkDetector implements Detector {
-  type = 'Links';
+  type = 'Anti-Link';
   private linkRegex =
     /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/gi;
   private inviteRegex =

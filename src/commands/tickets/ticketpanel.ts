@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   TextChannel,
+  ChannelType,
 } from 'discord.js';
 import { Command } from '../../types/index.js';
 import { TicketService } from '../../services/ticket/TicketService.js';
@@ -21,14 +22,30 @@ const command: Command = {
         .setName('description')
         .setDescription('Description for the ticket panel embed')
         .setRequired(false)
+    )
+    .addChannelOption((option) =>
+      option
+        .setName('category')
+        .setDescription('Specific category to open tickets under')
+        .setRequired(false)
+        .addChannelTypes(ChannelType.GuildCategory)
+    )
+    .addRoleOption((option) =>
+      option
+        .setName('support_role')
+        .setDescription('Specific role to ping when tickets open')
+        .setRequired(false)
     ),
   execute: async (interaction: ChatInputCommandInteraction) => {
     if (!interaction.guildId || !interaction.channel) return;
 
-    const title = interaction.options.getString('title') || 'Need Support?';
+    const title = interaction.options.getString('title') || "📜 The Steward's Office";
     const description =
       interaction.options.getString('description') ||
-      'To create a ticket use the Create ticket button';
+      "Welcome to The Steward's Office. If you wish to submit a formal petition to the Lords and Ladies, please select the button below.";
+    
+    const category = interaction.options.getChannel('category');
+    const supportRole = interaction.options.getRole('support_role');
 
     await interaction.deferReply({ ephemeral: true });
 
@@ -37,7 +54,9 @@ const command: Command = {
         interaction.guildId,
         interaction.channel as TextChannel,
         title,
-        description
+        description,
+        category?.id,
+        supportRole?.id
       );
 
       await interaction.followUp({

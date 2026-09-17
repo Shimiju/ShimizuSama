@@ -7,6 +7,7 @@ export class PrefixAdapter {
   public subcommandName: string;
   public args: Record<string, any>;
   public deferredMessage: Message | null = null;
+  public responseMessage: Message | null = null;
   public replied: boolean = false;
 
   constructor(
@@ -24,8 +25,14 @@ export class PrefixAdapter {
   get guild() {
     return this.message.guild;
   }
+  get guildId() {
+    return this.message.guildId;
+  }
   get channel() {
     return this.message.channel;
+  }
+  get channelId() {
+    return this.message.channelId;
   }
   get member() {
     return this.message.member;
@@ -45,8 +52,9 @@ export class PrefixAdapter {
     getSubcommand: () => this.subcommandName,
     getString: (_name: string) => this.args[_name] ?? null,
     getInteger: (_name: string) => (this.args[_name] ? parseInt(this.args[_name], 10) : null),
-    getUser: (_name: string) => null,
-    getRole: (_name: string) => null,
+    getUser: (_name: string) => this.args[_name] ?? null,
+    getMember: (_name: string) => this.args[_name] ?? null,
+    getRole: (_name: string) => this.args[_name] ?? null,
   };
 
   public async deferReply(_options?: any) {
@@ -56,7 +64,8 @@ export class PrefixAdapter {
 
   public async reply(options: string | MessagePayload | InteractionReplyOptions) {
     this.replied = true;
-    return await this.message.reply(options as any);
+    this.responseMessage = await this.message.reply(options as any);
+    return this.responseMessage;
   }
 
   public async editReply(options: string | MessagePayload | InteractionReplyOptions) {
@@ -64,9 +73,13 @@ export class PrefixAdapter {
       this.replied = true;
       return await this.deferredMessage.edit(options as any);
     }
+    if (this.responseMessage) {
+      return await this.responseMessage.edit(options as any);
+    }
     if (!this.replied) {
       this.replied = true;
-      return await (this.message.channel as any).send(options as any);
+      this.responseMessage = await (this.message.channel as any).send(options as any);
+      return this.responseMessage;
     }
     return await (this.message.channel as any).send(options as any);
   }

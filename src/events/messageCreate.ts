@@ -74,6 +74,55 @@ export const event: Event<Events.MessageCreate> = {
           await musicCommand.execute(fakeInteraction as any);
           return;
         }
+
+        // Generic Fallback for standard commands
+        if (commandName && !MUSIC_ALIASES.includes(commandName)) {
+          const client = message.client as any;
+          const command = client.commands?.get(commandName);
+          
+          if (command) {
+            let subcommandName = '';
+            let remainingArgs = [...args];
+            
+            if (command.data?.options?.some((opt: any) => opt.toJSON().type === 1)) {
+              if (remainingArgs.length > 0) {
+                const possibleSub = remainingArgs[0].toLowerCase();
+                if (command.data.options.some((opt: any) => opt.toJSON().name === possibleSub)) {
+                  subcommandName = possibleSub;
+                  remainingArgs.shift();
+                }
+              }
+            }
+
+            const adapterArgs: Record<string, any> = {};
+            
+            adapterArgs['user'] = message.mentions.users.first() || null;
+            adapterArgs['target'] = message.mentions.users.first() || null;
+            
+            adapterArgs['amount'] = remainingArgs[0] || null;
+            adapterArgs['duration'] = remainingArgs[0] || null;
+            adapterArgs['item'] = remainingArgs.join(' ') || null; // Support multi-word items for /buy
+            adapterArgs['choice'] = remainingArgs[1] || null;
+            adapterArgs['reason'] = remainingArgs.slice(1).join(' ') || null;
+            
+            if (commandName === 'pet' && subcommandName === 'adopt') {
+               adapterArgs['name'] = remainingArgs[0] || null;
+               adapterArgs['species'] = remainingArgs[1] || null;
+            }
+
+            if (commandName === 'roulette' && remainingArgs[1]) {
+              if (!isNaN(parseInt(remainingArgs[1], 10))) {
+                adapterArgs['number'] = remainingArgs[1];
+              } else {
+                adapterArgs['color'] = remainingArgs[1].toLowerCase();
+              }
+            }
+
+            const fakeInteraction = new PrefixAdapter(message, commandName, subcommandName, adapterArgs);
+            await command.execute(fakeInteraction as any);
+            return;
+          }
+        }
       }
 
       await AutoModEngine.handleMessage(message);

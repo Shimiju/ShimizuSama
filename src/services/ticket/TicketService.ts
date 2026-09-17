@@ -18,8 +18,10 @@ export class TicketService {
   public static async createPanel(
     guildId: string,
     channel: TextChannel,
-    title: string = 'Need Support?',
-    description: string = 'To create a ticket use the Create ticket button'
+    title: string = "📜 The Steward's Office",
+    description: string = "Welcome to The Steward's Office. If you wish to submit a formal petition to the Lords and Ladies, please select the button below.",
+    categoryId?: string,
+    supportRoleId?: string
   ) {
     const embed = new EmbedBuilder()
       .setTitle(title)
@@ -28,8 +30,8 @@ export class TicketService {
 
     const button = new ButtonBuilder()
       .setCustomId('ticket_create')
-      .setLabel('Create ticket')
-      .setEmoji('📩')
+      .setLabel('Submit Petition')
+      .setEmoji('📝')
       .setStyle(ButtonStyle.Secondary);
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
@@ -43,6 +45,8 @@ export class TicketService {
         messageId: message.id,
         title,
         description,
+        categoryId,
+        supportRoleId,
       },
     });
 
@@ -109,6 +113,26 @@ export class TicketService {
     return Buffer.from(html, 'utf-8');
   }
 
+  private static async generateJsonTranscript(channel: TextChannel): Promise<any[]> {
+    const messages = await channel.messages.fetch({ limit: 100 });
+    const sortedMessages = Array.from(messages.values()).reverse();
+
+    const transcript = [];
+    for (const msg of sortedMessages) {
+      if (msg.author.bot) continue;
+
+      transcript.push({
+        authorId: msg.author.id,
+        username: msg.author.username,
+        avatar: msg.author.displayAvatarURL({ extension: 'png', size: 64 }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
+        content: msg.content,
+        timestamp: msg.createdAt.toISOString(),
+      });
+    }
+
+    return transcript;
+  }
+
   public static async closeTicket(interaction: ButtonInteraction | any, channel: TextChannel) {
     await interaction.reply({ content: 'Closing ticket in 5 seconds...', ephemeral: false });
 
@@ -118,14 +142,15 @@ export class TicketService {
       });
 
       if (ticket) {
+        const jsonTranscript = await this.generateJsonTranscript(channel);
+        
         await prisma.ticket.update({
           where: { id: ticket.id },
-          data: { status: 'CLOSED', closedAt: new Date() },
-        });
-
-        const transcriptBuffer = await this.generateTranscript(channel);
-        const attachment = new AttachmentBuilder(transcriptBuffer, {
-          name: `transcript-${channel.name}.html`,
+          data: { 
+            status: 'CLOSED', 
+            closedAt: new Date(),
+            transcript: jsonTranscript
+          },
         });
 
         const settings = await prisma.ticketSettings.findUnique({
@@ -137,10 +162,20 @@ export class TicketService {
             settings.transcriptChannelId
           ) as TextChannel;
           if (logChannel) {
-            await logChannel.send({
-              content: `Transcript for ticket \`${channel.name}\` closed by ${interaction.user.username}`,
-              files: [attachment],
-            });
+            const dashboardUrl = process.env.DASHBOARD_URL || 'http://localhost:5173';
+            const transcriptUrl = `${dashboardUrl}/dashboard/${channel.guild.id}/tickets/${ticket.id}`;
+            
+            const embed = new EmbedBuilder()
+              .setColor('#5865F2')
+              .setTitle('🎫 Ticket Closed')
+              .setDescription(`Ticket \`${channel.name}\` was closed by ${interaction.user.toString()}`)
+              .addFields(
+                { name: 'Ticket ID', value: ticket.id, inline: false },
+                { name: 'View Transcript', value: `[Click Here to View Transcript](${transcriptUrl})`, inline: false }
+              )
+              .setTimestamp();
+
+            await logChannel.send({ embeds: [embed] });
           }
         }
       }
@@ -166,15 +201,32 @@ export class TicketService {
     });
 
     if (existingTicket) {
-      return interaction.reply({
-        content: `You already have an open ticket: <#${existingTicket.channelId}>`,
-        ephemeral: true,
-      });
+      const channelExists = guild.channels.cache.has(existingTicket.channelId);
+      
+      if (!channelExists) {
+        // Self-heal: The user manually deleted the channel, so close the ticket in DB
+        await prisma.ticket.update({
+          where: { id: existingTicket.id },
+          data: { status: 'CLOSED', closedAt: new Date() }
+        });
+      } else {
+        return interaction.reply({
+          content: `📜 You already have an open petition: <#${existingTicket.channelId}>`,
+          ephemeral: true,
+        });
+      }
     }
 
-    const settings = await prisma.ticketSettings.findUnique({
+    const globalSettings = await prisma.ticketSettings.findUnique({
       where: { guildId: guild.id },
     });
+
+    const panel = await prisma.ticketPanel.findFirst({
+      where: { messageId: interaction.message.id },
+    });
+
+    const categoryId = panel?.categoryId || globalSettings?.categoryId;
+    const supportRoleId = panel?.supportRoleId || globalSettings?.supportRoleId;
 
     await interaction.deferReply({ ephemeral: true });
 
@@ -203,9 +255,9 @@ export class TicketService {
         },
       ];
 
-      if (settings?.supportRoleId) {
+      if (supportRoleId) {
         permissionOverwrites.push({
-          id: settings.supportRoleId,
+          id: supportRoleId,
           allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.SendMessages,
@@ -215,9 +267,9 @@ export class TicketService {
       }
 
       const ticketChannel = await guild.channels.create({
-        name: `ticket-${member.user.username.toLowerCase()}`,
+        name: `petition-${member.user.username.toLowerCase()}`,
         type: ChannelType.GuildText,
-        parent: settings?.categoryId || null,
+        parent: categoryId || null,
         permissionOverwrites,
       });
 
@@ -230,27 +282,33 @@ export class TicketService {
       });
 
       const embed = new EmbedBuilder()
-        .setTitle('Ticket Support')
+        .setTitle('📜 Petition Submitted')
         .setDescription(
-          'Support will be with you shortly.\nTo close this ticket, press the button below.'
+          'The Steward will review your petition shortly.\nTo withdraw this petition, press the button below.'
         )
-        .setColor('#2F3136');
+        .setColor('#d4af37');
 
       const closeBtn = new ButtonBuilder()
         .setCustomId('ticket_close_request')
-        .setLabel('Close Ticket')
+        .setLabel('Withdraw Petition')
         .setEmoji('🔒')
         .setStyle(ButtonStyle.Danger);
 
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(closeBtn);
+      const claimBtn = new ButtonBuilder()
+        .setCustomId('ticket_claim')
+        .setLabel('Claim Ticket')
+        .setEmoji('🙋')
+        .setStyle(ButtonStyle.Success);
 
-      const pingMsg = settings?.supportRoleId
-        ? `<@&${settings.supportRoleId}> <@${member.id}>`
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(closeBtn, claimBtn);
+
+      const pingMsg = supportRoleId
+        ? `<@&${supportRoleId}> <@${member.id}>`
         : `<@${member.id}>`;
       await ticketChannel.send({ content: pingMsg, embeds: [embed], components: [row] });
 
       await interaction.followUp({
-        content: `Ticket created: <#${ticketChannel.id}>`,
+        content: `✅ Petition successfully filed: <#${ticketChannel.id}>`,
         ephemeral: true,
       });
     } catch (error) {
@@ -285,7 +343,35 @@ export class TicketService {
       await this.closeTicket(interaction, interaction.channel as TextChannel);
     } else if (interaction.customId === 'ticket_close_cancel') {
       await interaction.message.delete().catch(() => {});
+    } else if (interaction.customId === 'ticket_claim') {
+      await this.claimTicket(interaction, interaction.channel as TextChannel);
     }
+  }
+
+  public static async claimTicket(interaction: ButtonInteraction, channel: TextChannel) {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      return interaction.reply({ content: 'Only staff can claim tickets.', ephemeral: true });
+    }
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { channelId: channel.id },
+    });
+
+    if (!ticket) return;
+    if (ticket.claimerId) {
+      return interaction.reply({ content: `Already claimed by <@${ticket.claimerId}>.`, ephemeral: true });
+    }
+
+    await prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { claimerId: interaction.user.id },
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor('#57F287')
+      .setDescription(`✅ This ticket has been claimed by ${interaction.user.toString()}. They will assist you shortly.`);
+    
+    await interaction.reply({ embeds: [embed] });
   }
 
   public static async addUser(channel: TextChannel, user: User) {

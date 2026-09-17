@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, Outlet, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { LayoutDashboard, Shield, Ticket, Coins, Terminal, ArrowLeft, UserPlus, Tag } from 'lucide-react';
+import { LayoutDashboard, Shield, Ticket, Coins, Terminal, ArrowLeft, UserPlus, Tag, ShoppingBag, Archive, Dices } from 'lucide-react';
 
 export default function ServerLayout() {
   const { guildId } = useParams();
@@ -68,11 +68,27 @@ export default function ServerLayout() {
         </Link>
 
         <Link 
+          to={`/dashboard/${guildId}/social-feeds`} 
+          className={`sidebar-item ${currentPath.includes('/social-feeds') ? 'active' : ''}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+          Social Feeds
+        </Link>
+
+        <Link 
           to={`/dashboard/${guildId}/economy`} 
           className={`sidebar-item ${currentPath.includes('/economy') ? 'active' : ''}`}
         >
           <Coins size={20} />
-          Economy & Leveling
+          Economy Config
+        </Link>
+
+        <Link 
+          to={`/dashboard/${guildId}/shop`} 
+          className={`sidebar-item ${currentPath.includes('/shop') ? 'active' : ''}`}
+        >
+          <ShoppingBag size={20} />
+          The Grand Bazaar
         </Link>
 
         <Link 
@@ -90,7 +106,22 @@ export default function ServerLayout() {
           <Terminal size={20} />
           Custom Commands
         </Link>
-
+        
+        <Link 
+          to={`/dashboard/${guildId}/audit-logs`} 
+          className={`sidebar-item ${currentPath.includes('/audit-logs') ? 'active' : ''}`}
+        >
+          <Archive size={20} />
+          Web Archives
+        </Link>
+        
+        <Link 
+          to={`/dashboard/${guildId}/casino`} 
+          className={`sidebar-item ${currentPath.includes('/casino') ? 'active' : ''}`}
+        >
+          <Dices size={20} />
+          The Grand Casino
+        </Link>
       </div>
 
       <div className="main-content">

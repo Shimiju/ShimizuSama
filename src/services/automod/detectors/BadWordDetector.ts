@@ -2,7 +2,7 @@ import { Message } from 'discord.js';
 import { Detector, DetectorContext, Violation } from '../AutoModTypes.js';
 
 export class BadWordDetector implements Detector {
-  type = 'BadWords';
+  type = 'Bad Words';
 
   async detect(message: Message, context: DetectorContext): Promise<Violation | null> {
     if (!message.guild || message.author.bot) return null;

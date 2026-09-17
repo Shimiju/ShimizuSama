@@ -168,13 +168,13 @@ const command: Command = {
             },
           });
           await interaction.reply({
-            content: `✅ Added **${name}** to the shop for **${price} coins**.`,
+            content: `✅ Added **${name}** to The Royal Vault for **${price} Manor Gold 🪙**.`,
           });
         } else if (subCommand === 'remove') {
           await prisma.shopItem.deleteMany({
             where: { guildId: interaction.guildId, name },
           });
-          await interaction.reply({ content: `✅ Removed **${name}** from the shop.` });
+          await interaction.reply({ content: `✅ Removed **${name}** from The Royal Vault.` });
         }
         return;
       }

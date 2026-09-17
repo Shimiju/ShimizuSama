@@ -19,6 +19,7 @@
   "type": "module",
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
+    "@napi-rs/canvas": "^1.0.7",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "cookie-parser": "^1.4.7",
@@ -30,8 +31,10 @@
     "libsodium-wrappers": "^0.8.4",
     "pg": "^8.23.0",
     "pino": "^10.3.1",
+    "rss-parser": "^3.13.0",
     "shoukaku": "^4.3.0",
     "strip-comments": "^2.0.1",
+    "tesseract.js": "^7.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

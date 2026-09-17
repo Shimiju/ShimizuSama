@@ -5,6 +5,9 @@ import { logger } from '../utils/logger.js';
 import { ButtonInteraction, GuildMember } from 'discord.js';
 import { GiveawayService } from '../services/giveaway/GiveawayService.js';
 import { TicketService } from '../services/ticket/TicketService.js';
+import { MusicUI } from '../services/music/MusicUI.js';
+import { TempVCService } from '../services/tempvc/TempVCService.js';
+import { RoleService } from '../services/roles/RoleService.js';
 
 async function handleRolePanelButton(interaction: ButtonInteraction) {
   const parts = interaction.customId.split('_');
@@ -48,6 +51,26 @@ const event: Event<Events.InteractionCreate> = {
         await GiveawayService.handleJoinInteraction(interaction);
       } else if (interaction.customId.startsWith('ticket_')) {
         await TicketService.handleInteraction(interaction);
+      } else if (interaction.customId.startsWith('music_')) {
+        await MusicUI.handleInteraction(interaction);
+      } else if (interaction.customId.startsWith('tempvc_')) {
+        await TempVCService.handleInteraction(interaction);
+      }
+      return;
+    }
+
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith('tempvcmodal_')) {
+        await TempVCService.handleModalSubmit(interaction);
+      }
+      return;
+    }
+
+    if (interaction.isAnySelectMenu()) {
+      if (interaction.customId.startsWith('tempvcselect_')) {
+        await TempVCService.handleUserSelect(interaction as any);
+      } else if (interaction.customId.startsWith('manorroles_') && interaction.isStringSelectMenu()) {
+        await RoleService.handleInteraction(interaction);
       }
       return;
     }

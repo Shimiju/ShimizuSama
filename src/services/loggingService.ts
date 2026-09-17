@@ -14,6 +14,41 @@ export enum LogType {
 export class LoggingService {
   static async logAction(guild: Guild, type: LogType, embed: EmbedBuilder): Promise<void> {
     try {
+      // 1. Save to Database Archive
+      const action = embed.data.title || 'Unknown Action';
+      let targetId = null;
+      let moderatorId = null;
+      
+      const fields = embed.data.fields || [];
+      const targetField = fields.find(f => f.name.toLowerCase().includes('target') || f.name.toLowerCase().includes('user') || f.name.toLowerCase().includes('author') || f.name.toLowerCase().includes('member'));
+      if (targetField && targetField.value) {
+         const match = targetField.value.match(/<@!?(\d+)>/);
+         if (match) targetId = match[1];
+      }
+      
+      const modField = fields.find(f => f.name.toLowerCase().includes('moderator'));
+      if (modField && modField.value) {
+         const match = modField.value.match(/<@!?(\d+)>/);
+         if (match) moderatorId = match[1];
+      }
+      
+      if (!targetId && embed.data.footer?.text) {
+         const idMatch = embed.data.footer.text.match(/User ID: (\d+)/);
+         if (idMatch) targetId = idMatch[1];
+      }
+
+      await prisma.auditLogArchive.create({
+        data: {
+          guildId: guild.id,
+          type: type,
+          action: action,
+          targetId: targetId,
+          moderatorId: moderatorId,
+          details: embed.data as any
+        }
+      });
+
+      // 2. Send to Discord Channel
       const config = await prisma.logConfig.findUnique({
         where: { guildId: guild.id },
       });

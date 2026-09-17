@@ -76,9 +76,10 @@ const command: Command = {
         }
       }
 
-      await interaction.reply(
-        `🛍️ You successfully purchased **${item.name}** for **${item.price} coins**!`
-      );
+      await interaction.reply({
+        content: `🛍️ You successfully purchased **${item.name}** for **${item.price} coins**!`,
+        ephemeral: true
+      });
 
       AchievementService.checkEconomyAchievements(updatedProfile, interaction.channel as any).catch(
         (err) => {

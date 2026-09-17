@@ -31,6 +31,10 @@ model Guild {
   ticketPanels        TicketPanel[]
   tickets             Ticket[]
   serverStats         ServerStats?
+  tempVCSettings      TempVCSettings?
+  tempVoiceChannels   TempVoiceChannel[]
+  socialFeeds         SocialFeed[]
+  auditLogs           AuditLogArchive[]
 }
 
 model GuildSettings {
@@ -71,6 +75,7 @@ model WelcomeConfig {
   channelId        String?
   message          String?
   enabled          Boolean @default(false)
+  backgroundUrl    String?
   goodbyeChannelId String?
   goodbyeMessage   String?
 }
@@ -266,6 +271,7 @@ model UserGuildProfile {
 
   inventory    InventoryItem[]
   achievements UserAchievement[]
+  pet          UserPet?
 
   @@unique([guildId, userId])
   @@index([guildId])
@@ -281,6 +287,26 @@ model LevelReward {
 
   @@unique([guildId, level])
   @@index([guildId])
+}
+
+model UserPet {
+  id        String   @id @default(uuid())
+  profileId String   @unique
+  profile   UserGuildProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  name      String
+  species   String
+  
+  level     Int      @default(1)
+  xp        Int      @default(0)
+  
+  hunger    Int      @default(100)
+  energy    Int      @default(100)
+  
+  lastFedAt     DateTime @default(now())
+  lastBattledAt DateTime @default(now())
+  
+  createdAt DateTime @default(now())
 }
 
 model ShopItem {
@@ -356,26 +382,77 @@ model TicketSettings {
 }
 
 model TicketPanel {
-  id          String @id @default(uuid())
-  guildId     String
-  guild       Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  channelId   String
-  messageId   String
-  title       String @default("Need Support?")
-  description String @default("To create a ticket use the Create ticket button")
+  id            String  @id @default(uuid())
+  guildId       String
+  guild         Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channelId     String
+  messageId     String
+  title         String  @default("Need Support?")
+  description   String  @default("To create a ticket use the Create ticket button")
+  categoryId    String? // Custom category for this specific panel
+  supportRoleId String? // Custom support role for this specific panel
   
   @@index([guildId])
 }
 
 model Ticket {
-  id        String    @id @default(uuid())
-  guildId   String
-  guild     Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  channelId String    @unique
-  creatorId String
-  status    String    @default("OPEN") // OPEN, CLOSED
-  createdAt DateTime  @default(now())
-  closedAt  DateTime?
+  id          String    @id @default(uuid())
+  guildId     String
+  guild       Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channelId   String    @unique
+  creatorId   String
+  claimerId   String?   // The staff member who claimed the ticket
+  status      String    @default("OPEN") // OPEN, CLOSED
+  transcript  Json?     // Stores the JSON array of messages when closed
+  createdAt   DateTime  @default(now())
+  closedAt    DateTime?
 
   @@index([guildId])
+}
+
+model TempVCSettings {
+  guildId        String @id
+  guild          Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  joinChannelId  String // The channel users join to create a VC
+  categoryId     String // The category where new VCs are created
+}
+
+model TempVoiceChannel {
+  id        String @id @default(uuid())
+  guildId   String
+  guild     Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channelId String @unique
+  ownerId   String
+  createdAt DateTime @default(now())
+
+  @@index([guildId])
+}
+
+model SocialFeed {
+  id          String   @id @default(uuid())
+  guildId     String
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  platform    String   // 'YOUTUBE'
+  handle      String   // YouTube Channel ID
+  channelId   String   // Discord Channel ID to post in
+  message     String   @default("Hey @everyone, {creator} just uploaded a new video!\n{link}")
+  lastPostId  String?  // ID of the last video to prevent duplicate posts
+  createdAt   DateTime @default(now())
+
+  @@index([guildId])
+}
+
+model AuditLogArchive {
+  id          String   @id @default(uuid())
+  guildId     String
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  type        String   // Moderation, Message, Member, etc.
+  action      String   // e.g. "Message Deleted", "Member Banned"
+  targetId    String?  // The user or message ID that was acted upon
+  moderatorId String?  // The user who performed the action (if known)
+  details     Json?    // The full payload of the embed fields or extra context
+  createdAt   DateTime @default(now())
+
+  @@index([guildId])
+  @@index([type])
 }

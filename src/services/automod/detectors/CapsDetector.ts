@@ -2,7 +2,7 @@ import { Message } from 'discord.js';
 import { Detector, DetectorContext, Violation } from '../AutoModTypes.js';
 
 export class CapsDetector implements Detector {
-  type = 'Caps';
+  type = 'Anti-Caps';
 
   async detect(message: Message, context: DetectorContext): Promise<Violation | null> {
     if (!message.guild || message.author.bot) return null;

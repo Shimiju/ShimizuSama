@@ -22,12 +22,7 @@ export class AchievementService {
 
       let channelToSend: TextChannel | undefined = fallbackChannel;
 
-      if (settings?.levelUpChannelId && fallbackChannel?.guild) {
-        const customChannel = fallbackChannel.guild.channels.cache.get(settings.levelUpChannelId);
-        if (customChannel && customChannel.isTextBased()) {
-          channelToSend = customChannel as TextChannel;
-        }
-      }
+      // removed levelUpChannelId override for achievements so they stay in the local channel
 
       if (!channelToSend) return;
 

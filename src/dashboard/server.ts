@@ -1,4 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
@@ -508,10 +510,282 @@ export const startDashboardServer = (client: ShimizuClient) => {
     }
   });
 
+  // Fetch all closed tickets for a guild
+  app.get('/api/guilds/:id/tickets', requireAuth, requireGuildAccess, async (req: GuildRequest, res: Response) => {
+    try {
+      const tickets = await prisma.ticket.findMany({
+        where: { guildId: req.params.id, status: 'CLOSED' },
+        orderBy: { closedAt: 'desc' },
+        select: {
+          id: true,
+          channelId: true,
+          creatorId: true,
+          claimerId: true,
+          createdAt: true,
+          closedAt: true,
+          // exclude transcript to save bandwidth on list view
+        }
+      });
+      const ticketsWithUsers = await Promise.all(tickets.map(async (t) => {
+        let creatorName = t.creatorId;
+        let claimerName = t.claimerId;
+        
+        try {
+           const creator = client.users.cache.get(t.creatorId) || await client.users.fetch(t.creatorId).catch(() => null);
+           if (creator) creatorName = creator.username;
+        } catch {}
+
+        if (t.claimerId) {
+          try {
+             const claimer = client.users.cache.get(t.claimerId) || await client.users.fetch(t.claimerId).catch(() => null);
+             if (claimer) claimerName = claimer.username;
+          } catch {}
+        }
+        
+        return {
+          ...t,
+          creatorName,
+          claimerName
+        };
+      }));
+      res.json(ticketsWithUsers);
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch tickets');
+      res.status(500).json({ error: 'Failed to fetch tickets' });
+    }
+  });
+
+  // Fetch a specific ticket with transcript
+  app.get('/api/guilds/:id/tickets/:ticketId', requireAuth, requireGuildAccess, async (req: Request<{id: string, ticketId: string}>, res: Response) => {
+    try {
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: req.params.ticketId, guildId: req.params.id },
+      });
+      if (!ticket) {
+        return res.status(404).json({ error: 'Ticket not found' });
+      }
+      res.json(ticket);
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch ticket transcript');
+      res.status(500).json({ error: 'Failed to fetch ticket transcript' });
+    }
+  });
+
+  // Delete a specific ticket
+  app.delete('/api/guilds/:id/tickets/:ticketId', requireAuth, requireGuildAccess, async (req: Request<{id: string, ticketId: string}>, res: Response) => {
+    try {
+      await prisma.ticket.delete({
+        where: { id: req.params.ticketId, guildId: req.params.id },
+      });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error({ error }, 'Failed to delete ticket');
+      res.status(500).json({ error: 'Failed to delete ticket' });
+    }
+  });
+
+  // Audit Logs API
+  app.get('/api/guilds/:id/audit-logs', requireAuth, requireGuildAccess, async (req: Request<{id: string}>, res: Response) => {
+    try {
+      const { type, page = '1' } = req.query;
+      const skip = (parseInt(page as string) - 1) * 50;
+
+      const whereClause: any = { guildId: req.params.id };
+      if (type) {
+        whereClause.type = type as string;
+      }
+
+      const logs = await prisma.auditLogArchive.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        skip
+      });
+      
+      const total = await prisma.auditLogArchive.count({ where: whereClause });
+
+      res.json({ logs, total, pages: Math.ceil(total / 50) });
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch audit logs');
+      res.status(500).json({ error: 'Failed to fetch audit logs' });
+    }
+  });
+
+  // Casino Stats API
+  app.get('/api/guilds/:id/casino/leaderboard', requireAuth, requireGuildAccess, async (req: GuildRequest, res: Response) => {
+    try {
+      const transactions = await prisma.economyTransaction.findMany({
+        where: { 
+          guildId: req.params.id,
+          type: { in: ['CASINO_WIN', 'CASINO_LOSS'] }
+        }
+      });
+
+      const userStats: Record<string, { userId: string, profit: number, wagered: number, wins: number, losses: number }> = {};
+      
+      for (const t of transactions) {
+        if (!userStats[t.userId]) {
+          userStats[t.userId] = { userId: t.userId, profit: 0, wagered: 0, wins: 0, losses: 0 };
+        }
+        
+        userStats[t.userId].profit += t.amount;
+        if (t.type === 'CASINO_WIN') {
+          userStats[t.userId].wins++;
+          // Rough approximation: if they won X profit, they wagered something to get it. 
+          // But our transaction amounts for wins are just the net profit (winnings - bet).
+          // Actually, our engine logged net profit. So we don't know the exact wager unless we stored it in details.
+          // Let's just track Profit/Loss for now.
+        } else {
+          userStats[t.userId].losses++;
+          userStats[t.userId].wagered += Math.abs(t.amount);
+        }
+      }
+
+      const leaderboard = Object.values(userStats).sort((a, b) => b.profit - a.profit).slice(0, 50);
+
+      // Fetch usernames from Discord API
+      const finalLeaderboard = await Promise.all(leaderboard.map(async (l) => {
+        let username = 'Unknown User';
+        try {
+          const res = await fetch(`https://discord.com/api/v10/users/${l.userId}`, {
+            headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            username = data.username;
+          }
+        } catch (e) {
+          logger.warn(`Failed to fetch username for ${l.userId} from Discord API`);
+        }
+        
+        return {
+          ...l,
+          user: { username }
+        };
+      }));
+
+      res.json(finalLeaderboard);
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch casino leaderboard');
+      res.status(500).json({ error: 'Failed to fetch casino leaderboard' });
+    }
+  });
+
+  // Social Feeds API
+  app.get('/api/guilds/:id/social-feeds', requireAuth, requireGuildAccess, async (req: GuildRequest, res: Response) => {
+    try {
+      const feeds = await prisma.socialFeed.findMany({
+        where: { guildId: req.params.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json(feeds);
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch social feeds');
+      res.status(500).json({ error: 'Failed to fetch social feeds' });
+    }
+  });
+
+  app.post('/api/guilds/:id/social-feeds', requireAuth, requireGuildAccess, async (req: GuildRequest, res: Response) => {
+    try {
+      const { platform, handle, channelId, message } = req.body;
+      if (!platform || !handle || !channelId) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      const feed = await prisma.socialFeed.create({
+        data: {
+          guildId: req.params.id,
+          platform,
+          handle,
+          channelId,
+          message: message || "Hey @everyone, {creator} just uploaded a new video!\n{link}",
+        },
+      });
+      res.json(feed);
+    } catch (error) {
+      logger.error({ error }, 'Failed to create social feed');
+      res.status(500).json({ error: 'Failed to create social feed' });
+    }
+  });
+
+  app.delete('/api/guilds/:id/social-feeds/:feedId', requireAuth, requireGuildAccess, async (req: Request<{id: string, feedId: string}>, res: Response) => {
+    try {
+      await prisma.socialFeed.delete({
+        where: { id: req.params.feedId, guildId: req.params.id },
+      });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error({ error }, 'Failed to delete social feed');
+      res.status(500).json({ error: 'Failed to delete social feed' });
+    }
+  });
+  // Shop API
+  app.get('/api/guilds/:id/shop', requireAuth, requireGuildAccess, async (req: GuildRequest, res: Response) => {
+    try {
+      const items = await prisma.shopItem.findMany({
+        where: { guildId: req.params.id },
+        orderBy: { price: 'asc' },
+      });
+      res.json(items);
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch shop items');
+      res.status(500).json({ error: 'Failed to fetch shop items' });
+    }
+  });
+
+  app.post('/api/guilds/:id/shop', requireAuth, requireGuildAccess, async (req: GuildRequest, res: Response) => {
+    try {
+      const { name, description, price, roleId } = req.body;
+      if (!name || price == null) {
+        return res.status(400).json({ error: 'Missing required fields (name, price)' });
+      }
+
+      const item = await prisma.shopItem.create({
+        data: {
+          guildId: req.params.id,
+          name,
+          description,
+          price: parseInt(price),
+          roleId: roleId || null,
+        },
+      });
+      res.json(item);
+    } catch (error) {
+      logger.error({ error }, 'Failed to create shop item');
+      res.status(500).json({ error: 'Failed to create shop item' });
+    }
+  });
+
+  app.delete('/api/guilds/:id/shop/:itemId', requireAuth, requireGuildAccess, async (req: Request<{id: string, itemId: string}>, res: Response) => {
+    try {
+      await prisma.shopItem.delete({
+        where: { id: req.params.itemId, guildId: req.params.id },
+      });
+      res.json({ success: true });
+    } catch (error) {
+      logger.error({ error }, 'Failed to delete shop item');
+      res.status(500).json({ error: 'Failed to delete shop item' });
+    }
+  });
+
   app.use((err: any, req: any, res: any, _next: any) => {
     logger.error({ err }, 'Express unhandled error');
     res.status(500).json({ error: 'Internal Server Error' });
   });
+
+  // Serve static files from dashboard-ui/dist if they exist
+  const distPath = path.join(process.cwd(), 'dashboard-ui', 'dist');
+  
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.use((req, res, next) => {
+      if (req.method === 'GET' && !req.path.startsWith('/api')) {
+        res.sendFile(path.join(distPath, 'index.html'));
+      } else {
+        next();
+      }
+    });
+  }
 
   app.listen(env.DASHBOARD_PORT, env.BIND_HOST, () => {
     logger.info(

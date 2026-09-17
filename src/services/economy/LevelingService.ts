@@ -46,6 +46,12 @@ export class LevelingService {
       this.xpCooldowns.set(cooldownKey, now);
 
       const xpToAdd = Math.floor(Math.random() * (25 - 15 + 1)) + 15;
+      
+      // 50% chance to earn 5-15 Manor Gold per message (respecting the 60s cooldown)
+      let goldToAdd = 0;
+      if (Math.random() > 0.5) {
+        goldToAdd = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
+      }
 
       await prisma.guild.upsert({
         where: { id: guildId },
@@ -69,6 +75,8 @@ export class LevelingService {
         update: {
           xp: { increment: xpToAdd },
           messagesSent: { increment: 1 },
+          balance: { increment: goldToAdd },
+          totalCoinsEarned: { increment: goldToAdd },
         },
         create: {
           guildId,
@@ -76,8 +84,22 @@ export class LevelingService {
           xp: xpToAdd,
           messagesSent: 1,
           level: 0,
+          balance: goldToAdd,
+          totalCoinsEarned: goldToAdd,
         },
       });
+
+      if (goldToAdd > 0) {
+        await prisma.economyTransaction.create({
+          data: {
+            guildId,
+            userId,
+            type: 'CHAT_REWARD',
+            amount: goldToAdd,
+            balanceAfter: profile.balance,
+          }
+        });
+      }
 
       AchievementService.checkMessagingAchievements(profile, message.channel as TextChannel).catch(
         (err) => {

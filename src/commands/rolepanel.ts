@@ -46,7 +46,10 @@ const command: Command = {
     ),
 
   execute: async (interaction: ChatInputCommandInteraction) => {
-    if (!interaction.inCachedGuild()) return;
+    if (!interaction.inCachedGuild()) {
+      await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+      return;
+    }
     const subCommand = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
 

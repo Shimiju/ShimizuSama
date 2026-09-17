@@ -4,6 +4,7 @@ import { PlayerState } from '../../types/music.js';
 import { QueueManager } from './QueueManager.js';
 import { logger } from '../../utils/logger.js';
 import { MusicService } from './MusicService.js';
+import { MusicUI } from './MusicUI.js';
 
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -210,9 +211,7 @@ export class GuildMusicPlayer {
             await this.currentMessage.delete().catch(() => null);
           }
 
-          this.currentMessage = await channel.send(
-            `🎶 Now playing: **${title}** by ${author} (<@${track.requesterId}>)`
-          );
+          this.currentMessage = await MusicUI.sendNowPlaying(channel, track, this);
         }
       } catch {
         // Channel may have been deleted or the bot lost access; nothing to do.

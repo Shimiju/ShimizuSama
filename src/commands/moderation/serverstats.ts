@@ -18,7 +18,10 @@ export const command: Command = {
     ) as SlashCommandBuilder,
 
   execute: async (interaction: ChatInputCommandInteraction) => {
-    if (!interaction.inCachedGuild()) return;
+    if (!interaction.inCachedGuild()) {
+      await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+      return;
+    }
     const subcommand = interaction.options.getSubcommand();
 
     await interaction.deferReply({ ephemeral: true });

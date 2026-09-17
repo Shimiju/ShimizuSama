@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { Command } from '../../types/index.js';
 import { EconomyService } from '../../services/economy/EconomyService.js';
 import { logger } from '../../utils/logger.js';
@@ -11,7 +11,7 @@ const command: Command = {
       option.setName('user').setDescription('The user to check').setRequired(false)
     ),
   execute: async (interaction: ChatInputCommandInteraction) => {
-    if (!interaction.guildId) {
+    if (!interaction.guildId || !interaction.guild) {
       await interaction.reply({
         content: 'This command can only be used in a server.',
         ephemeral: true,
@@ -25,19 +25,28 @@ const command: Command = {
       const inventory = await EconomyService.getInventory(interaction.guildId, targetUser.id);
 
       if (inventory.length === 0) {
-        await interaction.reply({
-          content: `🎒 **${targetUser.username}**'s inventory is empty.`,
-          ephemeral: true,
-        });
+        const emptyEmbed = new EmbedBuilder()
+          .setTitle(`🎒 ${targetUser.username}'s Inventory`)
+          .setDescription(`${targetUser.username}'s inventory is completely empty. Head to the \`/shop\` to buy some items!`)
+          .setColor('#24283b');
+          
+        await interaction.reply({ embeds: [emptyEmbed] });
         return;
       }
 
-      let invStr = `🎒 **${targetUser.username}'s Inventory**\n\n`;
-      for (const inv of inventory) {
-        invStr += `**${inv.item.name}** x${inv.quantity}\n`;
-      }
+      const embed = new EmbedBuilder()
+        .setTitle(`🎒 ${targetUser.username}'s Inventory`)
+        .setColor('#bb9af7')
+        .setThumbnail(targetUser.displayAvatarURL({ extension: 'png' }));
 
-      await interaction.reply({ content: invStr });
+      let desc = '';
+      for (const inv of inventory) {
+        desc += `**${inv.quantity}x** ${inv.item.name}\n`;
+      }
+      
+      embed.setDescription(desc);
+
+      await interaction.reply({ embeds: [embed] });
     } catch (error) {
       logger.error(
         { error, guildId: interaction.guildId, userId: interaction.user.id },

@@ -1,4 +1,4 @@
-import { Events, GuildMember, TextChannel, EmbedBuilder } from 'discord.js';
+import { Events, GuildMember, TextChannel, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { Event } from '../types/index.js';
 import { prisma } from '../database/prisma.js';
 import { VariableParser, VariableContext } from '../utils/variables.js';
@@ -6,6 +6,7 @@ import { RaidProtectionService } from '../services/automod/RaidProtectionService
 import { logger } from '../utils/logger.js';
 import { LoggingService, LogType } from '../services/loggingService.js';
 import { ServerStatsService } from '../services/serverStats/ServerStatsService.js';
+import { CardGenerator } from '../services/image/CardGenerator.js';
 
 const event: Event<Events.GuildMemberAdd> = {
   name: Events.GuildMemberAdd,
@@ -42,6 +43,9 @@ const event: Event<Events.GuildMemberAdd> = {
           const context: VariableContext = { user: member.user, member, guild, channel };
           const parsedMessage = VariableParser.parse(welcomeConfig.message, context);
 
+          const imageBuffer = await CardGenerator.generateWelcomeCard(member, guild.memberCount);
+          const attachment = new AttachmentBuilder(imageBuffer, { name: 'welcome-card.png' });
+
           const embed = new EmbedBuilder()
             .setAuthor({
               name: `A new member has joined!`,
@@ -49,15 +53,15 @@ const event: Event<Events.GuildMemberAdd> = {
             })
             .setTitle(`Welcome to ${guild.name}! ✨`)
             .setDescription(parsedMessage)
-            .setThumbnail(member.user.displayAvatarURL({ size: 512 }))
-            .setColor('#ffb6c1')
+            .setImage('attachment://welcome-card.png')
+            .setColor('#d4af37') // Manor Gold
             .setFooter({
               text: `You are our ${guild.memberCount}th member!`,
               iconURL: guild.iconURL() || undefined,
             })
             .setTimestamp();
 
-          await channel.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {
+          await channel.send({ content: `<@${member.id}>`, embeds: [embed], files: [attachment] }).catch(() => {
             logger.warn(`Failed to send welcome message in guild ${guild.id}`);
           });
         }

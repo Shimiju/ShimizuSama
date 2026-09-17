@@ -13,6 +13,7 @@ import {
 } from './detectors/OtherDetectors.js';
 import { Detector } from './AutoModTypes.js';
 import { ActionExecutor } from './ActionExecutor.js';
+import { OCRScanner } from './OCRScanner.js';
 
 export class AutoModEngine {
   private static detectors: Detector[] = [
@@ -31,6 +32,13 @@ export class AutoModEngine {
 
     if (message.flags.has('Ephemeral')) return;
 
+    if (
+      message.member?.permissions.has('Administrator') ||
+      message.member?.permissions.has('ManageMessages')
+    ) {
+      return; // Ignore admins and moderators
+    }
+
     const cacheKey = `automod:rules:${message.guild.id}`;
     let rules = await CacheService.get<any[]>(cacheKey);
 
@@ -42,6 +50,27 @@ export class AutoModEngine {
     }
 
     if (rules.length === 0) return;
+
+    // Process attachments for OCR
+    if (message.attachments.size > 0) {
+      let ocrText = '';
+      for (const [id, attachment] of message.attachments) {
+        if (attachment.contentType?.startsWith('image/')) {
+          const text = await OCRScanner.scanImage(attachment.url);
+          if (text) {
+            ocrText += ` [OCR: ${text}]`;
+          }
+        }
+      }
+      
+      if (ocrText) {
+        Object.defineProperty(message, 'content', {
+          value: message.content + ocrText,
+          writable: true,
+          configurable: true
+        });
+      }
+    }
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 

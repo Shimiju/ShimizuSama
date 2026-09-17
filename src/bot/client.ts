@@ -71,7 +71,7 @@ export class ShimizuClient extends Client {
       logger.error(
         {
           name,
-          error,
+          err: error,
         },
         'Shoukaku Node Error'
       );

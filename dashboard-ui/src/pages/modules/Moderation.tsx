@@ -17,10 +17,12 @@ export default function Moderation() {
         setLogConfig(res.data.logConfig);
         
         // Ensure default rules exist in state
-        const rules = res.data.autoModRules;
+        const rules = res.data.autoModRules || [];
         const defaultRules = [
           { type: 'Anti-Link', enabled: false, action: 'Delete & Warn', data: null },
-          { type: 'Bad Words', enabled: false, action: 'Delete & Warn', data: { words: '' } }
+          { type: 'Bad Words', enabled: false, action: 'Delete & Warn', data: { words: '' } },
+          { type: 'Anti-Spam', enabled: false, action: 'Delete & Warn', data: null },
+          { type: 'Anti-Caps', enabled: false, action: 'Delete & Warn', data: null }
         ];
 
         const mergedRules = defaultRules.map(def => {

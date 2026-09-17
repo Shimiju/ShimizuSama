@@ -3,7 +3,7 @@ import { Detector, DetectorContext, Violation } from '../AutoModTypes.js';
 import { CacheService } from '../../cacheService.js';
 
 export class SpamDetector implements Detector {
-  type = 'Spam';
+  type = 'Anti-Spam';
 
   async detect(message: Message, context: DetectorContext): Promise<Violation | null> {
     if (!message.guild || message.author.bot) return null;

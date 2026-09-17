@@ -49,21 +49,21 @@ export class ServerStatsService {
       ] as any;
 
       const allMembersChannel = await guild.channels.create({
-        name: `╰----➤- 👥 All members: ${memberCount}`,
+        name: `╰-➢-👥 -all-residents: ${memberCount}`,
         type: ChannelType.GuildVoice,
         parent: category.id,
         permissionOverwrites: basePermissions,
       });
 
       const membersChannel = await guild.channels.create({
-        name: `╰----➤- 👤 Members: ${userCount}`,
+        name: `╰-➢-👤 -residents: ${userCount}`,
         type: ChannelType.GuildVoice,
         parent: category.id,
         permissionOverwrites: basePermissions,
       });
 
       const botsChannel = await guild.channels.create({
-        name: `╰----➤- 🤖 Bots: ${botCount}`,
+        name: `╰-➢-🤖 -house-automata: ${botCount}`,
         type: ChannelType.GuildVoice,
         parent: category.id,
         permissionOverwrites: basePermissions,
@@ -107,22 +107,22 @@ export class ServerStatsService {
 
       if (config.allMembersId) {
         const ch = guild.channels.cache.get(config.allMembersId);
-        if (ch && ch.name !== `╰----➤- 👥 All members: ${memberCount}`) {
-          await ch.setName(`╰----➤- 👥 All members: ${memberCount}`).catch(() => null);
+        if (ch && ch.name !== `╰-➢-👥 -all-residents: ${memberCount}`) {
+          await ch.setName(`╰-➢-👥 -all-residents: ${memberCount}`).catch(() => null);
         }
       }
 
       if (config.membersId) {
         const ch = guild.channels.cache.get(config.membersId);
-        if (ch && ch.name !== `╰----➤- 👤 Members: ${userCount}`) {
-          await ch.setName(`╰----➤- 👤 Members: ${userCount}`).catch(() => null);
+        if (ch && ch.name !== `╰-➢-👤 -residents: ${userCount}`) {
+          await ch.setName(`╰-➢-👤 -residents: ${userCount}`).catch(() => null);
         }
       }
 
       if (config.botsId) {
         const ch = guild.channels.cache.get(config.botsId);
-        if (ch && ch.name !== `╰----➤- 🤖 Bots: ${botCount}`) {
-          await ch.setName(`╰----➤- 🤖 Bots: ${botCount}`).catch(() => null);
+        if (ch && ch.name !== `╰-➢-🤖 -house-automata: ${botCount}`) {
+          await ch.setName(`╰-➢-🤖 -house-automata: ${botCount}`).catch(() => null);
         }
       }
     } catch (err) {
