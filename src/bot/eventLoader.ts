@@ -23,7 +23,7 @@ export const loadEvents = async (client: ShimizuClient): Promise<void> => {
     const filePath = path.join(eventsPath, file);
     try {
       const module = await import(`file://${filePath}`);
-      const event: Event<keyof import('discord.js').ClientEvents> = module.default;
+      const event: Event<keyof import('discord.js').ClientEvents> = module.default || module.event;
 
       if (event.once) {
         client.once(event.name, (...args) => event.execute(...args));
