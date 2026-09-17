@@ -21,7 +21,7 @@ if (!isWin && YTDLP.endsWith('.exe')) YTDLP = YTDLP.replace('.exe', '');
 
 import fs from 'node:fs';
 if (!isWin) {
-  try { fs.chmodSync(YTDLP, 0o755); } catch (e) {}
+  try { fs.chmodSync(YTDLP, 0o755); } catch (e) { }
 }
 
 const NODE_RT = env.YTDLP_NODE_PATH || path.join(PROJECT_ROOT, 'lavalink', 'node', 'bin', 'node');
@@ -170,7 +170,7 @@ function forwardWithRedirects(
       if (status >= 300 && status < 400 && upstream.headers.location) {
         // Tunggu body redirect habis dulu (agar socket bersih) sebelum follow.
         upstream.resume();
-        upstream.on('error', () => {});
+        upstream.on('error', () => { });
         upstream.on('end', () => {
           const nextUrl = new URL(upstream.headers.location!, target).toString();
           forwardWithRedirects(nextUrl, headers, redirects + 1, res);
@@ -228,62 +228,101 @@ export interface LiveStreamInfo {
   title: string;
 }
 
+// --- Cookie header cache ---------------------------------------------
+// Re-reading + re-parsing cookies.txt on every single poll (per feed,
+// every 15s) is pure wasted disk I/O since cookies rarely change.
+// Cache the built header and only refresh it periodically.
+let cachedCookieHeader = '';
+let cookieCacheLoadedAt = 0;
+const COOKIE_CACHE_TTL_MS = 5 * 60 * 1000; // refresh at most every 5 minutes
+
+async function getCookieHeader(): Promise<string> {
+  const now = Date.now();
+  if (cachedCookieHeader && now - cookieCacheLoadedAt < COOKIE_CACHE_TTL_MS) {
+    return cachedCookieHeader;
+  }
+
+  try {
+    const cookieStr = await fs.promises.readFile(COOKIES, 'utf8');
+    cachedCookieHeader = cookieStr
+      .split('\n')
+      .filter((l) => !l.startsWith('#') && l.trim().length > 0)
+      .map((l) => {
+        const parts = l.split('\t');
+        if (parts.length >= 7) return `${parts[5].trim()}=${parts[6].trim()}`;
+        return '';
+      })
+      .filter(Boolean)
+      .join('; ')
+      .replace(/[\r\n\t]/g, '');
+    cookieCacheLoadedAt = now;
+  } catch (e) {
+    logger.warn('Could not read yt-dlp cookies for native scraper');
+    // don't update cookieCacheLoadedAt on failure, so we retry sooner
+  }
+
+  return cachedCookieHeader;
+}
+
 /**
  * Checks if a YouTube channel is currently live using yt-dlp.
  * Bypasses bot detection by using the same cookies and proxies as the music system.
  */
 export async function checkLiveStream(handle: string): Promise<LiveStreamInfo | null> {
-  const url = handle.startsWith('UC') 
+  const url = handle.startsWith('UC')
     ? `https://www.youtube.com/channel/${handle}/streams?t=${Date.now()}`
     : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/streams?t=${Date.now()}`;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000); // don't let one hung request stall the whole poll cycle
+
   try {
-    let cookieHeader = '';
-    try {
-      const cookieStr = await fs.promises.readFile(COOKIES, 'utf8');
-      cookieHeader = cookieStr.split('\n')
-        .filter(l => !l.startsWith('#') && l.trim().length > 0)
-        .map(l => {
-          const parts = l.split('\t');
-          if (parts.length >= 7) return `${parts[5].trim()}=${parts[6].trim()}`;
-          return '';
-        })
-        .filter(Boolean)
-        .join('; ')
-        .replace(/[\r\n\t]/g, '');
-    } catch (e) {
-      logger.warn('Could not read yt-dlp cookies for native scraper');
-    }
+    const cookieHeader = await getCookieHeader();
 
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
         'Cookie': cookieHeader,
-        'Accept-Language': 'en-US,en;q=0.9'
-      }
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: controller.signal,
     });
-    
+
     if (!res.ok) return null;
-    
+
     const html = await res.text();
     const match = html.match(/var ytInitialData = (.*?);<\/script>/);
     if (!match) return null;
-    
-    const data = JSON.parse(match[1]);
-    const strData = JSON.stringify(data);
-    
-    if (strData.includes('BADGE_STYLE_TYPE_LIVE_NOW')) {
-      const liveVideoBlock = strData.match(/{"videoId":"([^"]+)","thumbnail":.*?BADGE_STYLE_TYPE_LIVE_NOW.*?title":{"runs":\[{"text":"(.*?)"}\]/);
+
+    // match[1] is ALREADY the raw JSON text — no need to JSON.parse() it
+    // into an object and then JSON.stringify() it right back into a
+    // string just to regex it. That round trip was the single biggest
+    // cost in this function (multi-MB payloads on channels with lots of
+    // videos), and it ran synchronously on Node's single event loop
+    // thread, which can also stall Discord gateway heartbeats/other bot
+    // activity while it churns.
+    const rawJson = match[1];
+
+    if (rawJson.includes('BADGE_STYLE_TYPE_LIVE_NOW')) {
+      const liveVideoBlock = rawJson.match(
+        /{"videoId":"([^"]+)","thumbnail":.*?BADGE_STYLE_TYPE_LIVE_NOW.*?title":{"runs":\[{"text":"(.*?)"}\]/,
+      );
       if (liveVideoBlock) {
         return {
           videoId: liveVideoBlock[1],
-          title: liveVideoBlock[2]
+          title: liveVideoBlock[2],
         };
       }
     }
     return null;
   } catch (err: any) {
-    logger.error({ err }, 'Native cookie live stream check failed');
+    if (err?.name === 'AbortError') {
+      logger.warn({ handle }, 'Live stream check timed out after 10s');
+    } else {
+      logger.error({ err }, 'Native cookie live stream check failed');
+    }
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
