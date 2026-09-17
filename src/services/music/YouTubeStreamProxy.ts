@@ -234,32 +234,56 @@ export interface LiveStreamInfo {
  */
 export async function checkLiveStream(handle: string): Promise<LiveStreamInfo | null> {
   const url = handle.startsWith('UC') 
-    ? `https://www.youtube.com/channel/${handle}/streams`
-    : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/streams`;
+    ? `https://www.youtube.com/channel/${handle}/streams?t=${Date.now()}`
+    : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/streams?t=${Date.now()}`;
 
   try {
-    const args = [
-      '--dump-json',
-      '--flat-playlist',
-      '--playlist-items', '1',
-      '--cookies', COOKIES,
-      '--no-warnings',
-      url
-    ];
+    let cookieHeader = '';
+    try {
+      const cookieStr = await fs.promises.readFile(COOKIES, 'utf8');
+      cookieHeader = cookieStr.split('\n')
+        .filter(l => !l.startsWith('#') && l.trim().length > 0)
+        .map(l => {
+          const parts = l.split('\t');
+          if (parts.length >= 7) return `${parts[5].trim()}=${parts[6].trim()}`;
+          return '';
+        })
+        .filter(Boolean)
+        .join('; ')
+        .replace(/[\r\n\t]/g, '');
+    } catch (e) {
+      logger.warn('Could not read yt-dlp cookies for native scraper');
+    }
+
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+        'Cookie': cookieHeader,
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
     
-    const { stdout } = await execFileAsync(YTDLP, args);
-    const data = JSON.parse(stdout);
+    if (!res.ok) return null;
     
-    // With --flat-playlist on /streams, yt-dlp returns the metadata of the latest stream
-    if (data.is_live === true || data.live_status === 'is_live') {
-      return {
-        videoId: data.id,
-        title: data.title
-      };
+    const html = await res.text();
+    const match = html.match(/var ytInitialData = (.*?);<\/script>/);
+    if (!match) return null;
+    
+    const data = JSON.parse(match[1]);
+    const strData = JSON.stringify(data);
+    
+    if (strData.includes('BADGE_STYLE_TYPE_LIVE_NOW')) {
+      const liveVideoBlock = strData.match(/{"videoId":"([^"]+)","thumbnail":.*?BADGE_STYLE_TYPE_LIVE_NOW.*?title":{"runs":\[{"text":"(.*?)"}\]/);
+      if (liveVideoBlock) {
+        return {
+          videoId: liveVideoBlock[1],
+          title: liveVideoBlock[2]
+        };
+      }
     }
     return null;
   } catch (err: any) {
-    logger.error({ err }, 'Live stream check failed');
+    logger.error({ err }, 'Native cookie live stream check failed');
     return null;
   }
 }
