@@ -232,40 +232,34 @@ export interface LiveStreamInfo {
  * Checks if a YouTube channel is currently live using yt-dlp.
  * Bypasses bot detection by using the same cookies and proxies as the music system.
  */
-export async function checkNativeLiveStream(handle: string): Promise<LiveStreamInfo | null> {
+export async function checkLiveStream(handle: string): Promise<LiveStreamInfo | null> {
   const url = handle.startsWith('UC') 
-    ? `https://www.youtube.com/channel/${handle}/streams?t=${Date.now()}`
-    : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/streams?t=${Date.now()}`;
+    ? `https://www.youtube.com/channel/${handle}/streams`
+    : `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}/streams`;
 
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-      }
-    });
+    const args = [
+      '--dump-json',
+      '--flat-playlist',
+      '--playlist-items', '1',
+      '--cookies', COOKIES,
+      '--no-warnings',
+      url
+    ];
     
-    if (!res.ok) return null;
+    const { stdout } = await execFileAsync(YTDLP, args);
+    const data = JSON.parse(stdout);
     
-    const html = await res.text();
-    const match = html.match(/var ytInitialData = (.*?);<\/script>/);
-    if (!match) return null;
-    
-    const data = JSON.parse(match[1]);
-    const strData = JSON.stringify(data);
-    
-    if (strData.includes('BADGE_STYLE_TYPE_LIVE_NOW')) {
-      const liveVideoBlock = strData.match(/{"videoId":"([^"]+)","thumbnail":.*?BADGE_STYLE_TYPE_LIVE_NOW.*?title":{"runs":\[{"text":"(.*?)"}\]/);
-      if (liveVideoBlock) {
-        return {
-          videoId: liveVideoBlock[1],
-          title: liveVideoBlock[2]
-        };
-      }
+    // With --flat-playlist on /streams, yt-dlp returns the metadata of the latest stream
+    if (data.is_live === true || data.live_status === 'is_live') {
+      return {
+        videoId: data.id,
+        title: data.title
+      };
     }
     return null;
   } catch (err: any) {
-    logger.error({ err }, 'Native live stream check failed');
+    logger.error({ err }, 'Live stream check failed');
     return null;
   }
 }
