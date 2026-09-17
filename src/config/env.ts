@@ -29,6 +29,7 @@ const envSchema = z.object({
   YTDLP_PATH: z.string().optional(),
   YTDLP_NODE_PATH: z.string().optional(),
   YTDLP_COOKIES_PATH: z.string().optional(),
+  YTDLP_COOKIES: z.string().optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

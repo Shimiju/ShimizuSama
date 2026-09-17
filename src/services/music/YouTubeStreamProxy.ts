@@ -29,6 +29,19 @@ const finalNodeRt = fs.existsSync(NODE_RT) ? NODE_RT : 'node';
 
 const COOKIES = env.YTDLP_COOKIES_PATH || path.join(PROJECT_ROOT, 'lavalink', 'yt-dlp', 'cookies.txt');
 
+// Automatically write cookies from env var if provided (useful for Railway)
+if (env.YTDLP_COOKIES) {
+  try {
+    const cookieDir = path.dirname(COOKIES);
+    if (!fs.existsSync(cookieDir)) {
+      fs.mkdirSync(cookieDir, { recursive: true });
+    }
+    fs.writeFileSync(COOKIES, env.YTDLP_COOKIES.replace(/\\n/g, '\n'), 'utf8');
+  } catch (e) {
+    logger.error({ err: e }, 'Failed to write YTDLP_COOKIES to file');
+  }
+}
+
 const FORMAT = 'bestaudio[ext=m4a]/bestaudio[ext=webm]/18/best[ext=mp4]/best';
 
 export interface DirectStreamInfo {

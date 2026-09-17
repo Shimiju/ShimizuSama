@@ -207,10 +207,14 @@ const command: Command = {
           try {
             const direct = await audioProxy.resolveDirectStream(videoUrl);
             
-            // Automatically fix host.docker.internal for Railway deployments
             let proxyBaseUrl = env.AUDIO_PROXY_LAVALINK_URL;
-            if (process.env.RAILWAY_PRIVATE_DOMAIN && proxyBaseUrl.includes('host.docker.internal')) {
-              proxyBaseUrl = proxyBaseUrl.replace('host.docker.internal', process.env.RAILWAY_PRIVATE_DOMAIN);
+            if (process.env.RAILWAY_PRIVATE_DOMAIN) {
+              if (proxyBaseUrl.includes('host.docker.internal')) {
+                proxyBaseUrl = proxyBaseUrl.replace('host.docker.internal', process.env.RAILWAY_PRIVATE_DOMAIN);
+              }
+              if (proxyBaseUrl.includes('${RAILWAY_PRIVATE_DOMAIN}')) {
+                proxyBaseUrl = proxyBaseUrl.replace('${RAILWAY_PRIVATE_DOMAIN}', process.env.RAILWAY_PRIVATE_DOMAIN);
+              }
             }
             
             const proxiedUrl = `${proxyBaseUrl}/proxy?u=${encodeURIComponent(direct.url)}`;
