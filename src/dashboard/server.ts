@@ -708,6 +708,24 @@ export const startDashboardServer = (client: ShimizuClient) => {
     }
   });
 
+  app.put('/api/guilds/:id/social-feeds/:feedId', requireAuth, requireGuildAccess, async (req: Request<{id: string, feedId: string}>, res: Response) => {
+    try {
+      const { handle, channelId, message } = req.body;
+      const feed = await prisma.socialFeed.update({
+        where: { id: req.params.feedId, guildId: req.params.id },
+        data: {
+          ...(handle && { handle }),
+          ...(channelId && { channelId }),
+          ...(message && { message }),
+        },
+      });
+      res.json(feed);
+    } catch (error) {
+      logger.error({ error }, 'Failed to update social feed');
+      res.status(500).json({ error: 'Failed to update social feed' });
+    }
+  });
+
   app.delete('/api/guilds/:id/social-feeds/:feedId', requireAuth, requireGuildAccess, async (req: Request<{id: string, feedId: string}>, res: Response) => {
     try {
       await prisma.socialFeed.delete({

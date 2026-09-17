@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import axios from 'axios';
-import { Plus, Trash2, MonitorPlay } from 'lucide-react';
+import { Plus, Trash2, MonitorPlay, Edit } from 'lucide-react';
 
 interface SocialFeed {
   id: string;
@@ -21,6 +21,7 @@ export default function SocialFeeds() {
   const [newChannelId, setNewChannelId] = useState('');
   const [newMessage, setNewMessage] = useState('Hey @everyone, {creator} just uploaded a new video!\n{link}');
   const [isAdding, setIsAdding] = useState(false);
+  const [editingFeedId, setEditingFeedId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const fetchFeeds = async () => {
@@ -48,22 +49,44 @@ export default function SocialFeeds() {
     setError('');
 
     try {
-      await axios.post(`/api/guilds/${guildId}/social-feeds`, {
-        platform: 'YOUTUBE',
-        handle: newHandle,
-        channelId: newChannelId,
-        message: newMessage,
-      }, { withCredentials: true });
+      if (editingFeedId) {
+        await axios.put(`/api/guilds/${guildId}/social-feeds/${editingFeedId}`, {
+          handle: newHandle,
+          channelId: newChannelId,
+          message: newMessage,
+        }, { withCredentials: true });
+      } else {
+        await axios.post(`/api/guilds/${guildId}/social-feeds`, {
+          platform: 'YOUTUBE',
+          handle: newHandle,
+          channelId: newChannelId,
+          message: newMessage,
+        }, { withCredentials: true });
+      }
       
-      setNewHandle('');
-      setNewChannelId('');
-      setNewMessage('Hey @everyone, {creator} just uploaded a new video!\n{link}');
+      handleCancelEdit();
       await fetchFeeds();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to add feed');
+      setError(err.response?.data?.error || (editingFeedId ? 'Failed to update feed' : 'Failed to add feed'));
     } finally {
       setIsAdding(false);
     }
+  };
+
+  const handleEditClick = (feed: SocialFeed) => {
+    setEditingFeedId(feed.id);
+    setNewHandle(feed.handle);
+    setNewChannelId(feed.channelId);
+    setNewMessage(feed.message);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingFeedId(null);
+    setNewHandle('');
+    setNewChannelId('');
+    setNewMessage('Hey @everyone, {creator} just uploaded a new video!\n{link}');
+    setError('');
   };
 
   const handleDeleteFeed = async (feedId: string) => {
@@ -82,10 +105,10 @@ export default function SocialFeeds() {
         Automatically announce new YouTube videos to your server.
       </p>
 
-      {/* Add New Feed */}
+      {/* Add/Edit Feed */}
       <div className="glass-panel" style={{ marginBottom: '40px' }}>
         <h2 style={{ fontSize: '1.2rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <MonitorPlay color="#FF0000" /> Add YouTube Feed
+          <MonitorPlay color="#FF0000" /> {editingFeedId ? 'Edit YouTube Feed' : 'Add YouTube Feed'}
         </h2>
         
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
@@ -133,13 +156,28 @@ export default function SocialFeeds() {
 
         {error && <div style={{ color: 'var(--danger)', marginBottom: '15px', fontWeight: 500 }}>{error}</div>}
 
-        <button 
-          className="btn btn-primary" 
-          onClick={handleAddFeed}
-          disabled={isAdding}
-        >
-          <Plus size={18} /> {isAdding ? 'Adding...' : 'Add Feed'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="btn btn-primary" 
+            onClick={handleAddFeed}
+            disabled={isAdding}
+          >
+            {editingFeedId ? (
+              <>{isAdding ? 'Saving...' : 'Save Changes'}</>
+            ) : (
+              <><Plus size={18} /> {isAdding ? 'Adding...' : 'Add Feed'}</>
+            )}
+          </button>
+          {editingFeedId && (
+            <button 
+              className="btn btn-secondary" 
+              onClick={handleCancelEdit}
+              disabled={isAdding}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Active Feeds List */}
@@ -172,13 +210,21 @@ export default function SocialFeeds() {
                   </div>
                 </div>
                 
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ color: 'var(--danger)', borderColor: 'rgba(255, 92, 92, 0.2)' }}
-                  onClick={() => handleDeleteFeed(feed.id)}
-                >
-                  <Trash2 size={18} /> Remove
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => handleEditClick(feed)}
+                  >
+                    <Edit size={18} /> Edit
+                  </button>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ color: 'var(--danger)', borderColor: 'rgba(255, 92, 92, 0.2)' }}
+                    onClick={() => handleDeleteFeed(feed.id)}
+                  >
+                    <Trash2 size={18} /> Remove
+                  </button>
+                </div>
               </div>
             );
           })}
