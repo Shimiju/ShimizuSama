@@ -68,7 +68,7 @@ export function startWebhookServer(client: ShimizuClient) {
   });
 
   // Start server
-  const PORT = Number(env.WEBHOOK_PORT) || 3000;
+  const PORT = Number(process.env.WEBHOOK_PORT) || 3000;
   
   app.listen(PORT, '0.0.0.0', () => {
     logger.info(`🚀 Webhook server listening on port ${PORT}`);
