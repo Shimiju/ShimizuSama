@@ -203,7 +203,7 @@ async function announceToDiscord(
   }
 }
 
-async function subscribeToYouTube() {
+async function subscribeToYouTube(retries = 3) {
   const callbackUrl = getCallbackUrl();
   const channelId = process.env.YOUTUBE_CHANNEL_ID; // UCxxx format
   
@@ -218,7 +218,7 @@ async function subscribeToYouTube() {
   }
 
   try {
-    const response = await fetch('https://pubsubhubbub.appspot.com/subscribe', {
+    const response = await fetch('https://pubsubhubbub.appspot.com/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -235,9 +235,18 @@ async function subscribeToYouTube() {
     } else {
       const text = await response.text();
       logger.error(`Failed to subscribe to YouTube: ${response.status} - ${text}`);
+      
+      if (response.status >= 500 && retries > 0) {
+        logger.warn(`Retrying YouTube subscription in 5 seconds... (${retries} attempts left)`);
+        setTimeout(() => subscribeToYouTube(retries - 1), 5000);
+      }
     }
   } catch (err) {
     logger.error({ err }, 'Error subscribing to YouTube');
+    if (retries > 0) {
+      logger.warn(`Retrying YouTube subscription in 5 seconds... (${retries} attempts left)`);
+      setTimeout(() => subscribeToYouTube(retries - 1), 5000);
+    }
   }
 }
 
