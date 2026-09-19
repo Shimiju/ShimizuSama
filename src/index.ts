@@ -8,6 +8,7 @@ import { loadEvents } from './bot/eventLoader.js';
 import { musicService } from './services/music/MusicService.js';
 import { startAudioProxy } from './services/music/YouTubeStreamProxy.js';
 import { startDashboardServer } from './dashboard/server.js';
+import { startWebhookServer } from './services/webhook/server.js'; // TAMBAH INI
 
 const bootstrap = async () => {
   logger.info('Initializing Shimizu-sama...');
@@ -20,6 +21,10 @@ const bootstrap = async () => {
   musicService.init(client);
 
   startAudioProxy();
+  
+  // TAMBAH: Start webhook server untuk YouTube live notifications
+  startWebhookServer(client);
+  
   await client.start(env.DISCORD_TOKEN);
 
   startDashboardServer(client);
