@@ -78,7 +78,7 @@ export function startWebhookServer(client: ShimizuClient) {
       subscribeToYouTube().catch(err => {
         logger.error({ err }, 'Failed to auto-subscribe to YouTube');
       });
-    }, 2000); // Delay 2 detik biar bot fully initialized
+    }, 30000); // Delay 30 detik biar Railway ingress siap routing trafik eksternal
   });
 
   return app;
@@ -234,7 +234,7 @@ async function subscribeToYouTube() {
       logger.info({ callbackUrl }, '✅ Subscribed to YouTube push notifications');
     } else {
       const text = await response.text();
-      logger.error({ status: response.status, text }, 'Failed to subscribe to YouTube');
+      logger.error(`Failed to subscribe to YouTube: ${response.status} - ${text}`);
     }
   } catch (err) {
     logger.error({ err }, 'Error subscribing to YouTube');
